@@ -1,81 +1,175 @@
-let typingInterval;
-let currentIndex = 0;
-let textToType = "";
+// Global variables to track typing state
+let isTyping = false;
+let enableRandomPauses = true;
+let typingInterval = null;
+let pauseTimeout = null;
 
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "start") {
-    textToType = request.text;
-    currentIndex = 0;
-    startTyping();
-  } else if (request.action === "stop") {
-    stopTyping();
-  } else if (request.action === "delete") {
-    deleteTypedText();
-  }
-});
-
-function getInputField() {
-  const url = window.location.href;
-
-  if (url.includes("whatsapp")) {
-    return document.querySelector("[contenteditable='true']");
-  } else if (url.includes("discord")) {
-    return document.querySelector("div[role='textbox']");
-  }
-
-  return null;
+// Function to find the input field based on current site
+function findInputField() {
+    if (window.location.href.includes('web.whatsapp.com')) {
+        return document.querySelector('div[contenteditable="true"]');
+    } else if (window.location.href.includes('discord.com')) {
+        return document.querySelector('div[role="textbox"]');
+    }
+    return null;
 }
 
-function startTyping() {
-  const inputField = getInputField();
-  if (!inputField) return alert("Input field not found!");
+// Generate a random letter (a-z, A-Z)
+function getRandomLetter() {
+    const letters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    return letters.charAt(Math.floor(Math.random() * letters.length));
+}
 
-  stopTyping(); // Clear previous interval
+// Get random typing delay (100-200ms)
+function getRandomTypingDelay() {
+    return Math.floor(Math.random() * 100) + 100;
+}
 
-  typingInterval = setInterval(() => {
-    if (currentIndex >= textToType.length) {
-      stopTyping();
-      return;
+// Get random pause duration (1-5 seconds)
+function getRandomPauseDuration() {
+    return (Math.floor(Math.random() * 4) + 1) * 1000;
+}
+
+// Decide if we should pause (roughly every 5-15 characters)
+function shouldPause() {
+    const pauseChance = Math.floor(Math.random() * 15) + 5;
+    return Math.random() * 100 < pauseChance;
+}
+
+// Type a single character into the input field
+function typeCharacter() {
+    const inputField = findInputField();
+    if (!inputField) {
+        stopTyping();
+        return;
     }
 
-    const char = textToType[currentIndex];
+    // Type a random letter
+    const letter = getRandomLetter();
+    
+    // For WhatsApp
+    if (window.location.href.includes('web.whatsapp.com')) {
+        inputField.textContent += letter;
+        // Trigger input event to make WhatsApp recognize the typing
+        const event = new Event('input', { bubbles: true });
+        inputField.dispatchEvent(event);
+    } 
+    // For Discord
+    else if (window.location.href.includes('discord.com')) {
+        // Insert text at cursor position
+        const selection = window.getSelection();
+        const range = selection.getRangeAt(0);
+        const textNode = document.createTextNode(letter);
+        range.insertNode(textNode);
+        range.setStartAfter(textNode);
+        range.setEndAfter(textNode);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        
+        // Trigger input event
+        const event = new Event('input', { bubbles: true });
+        inputField.dispatchEvent(event);
+    }
+
+    // Check if we should pause
+    if (enableRandomPauses && shouldPause()) {
+        pauseTyping();
+    } else {
+        // Schedule next character
+        typingInterval = setTimeout(typeCharacter, getRandomTypingDelay());
+    }
+}
+
+// Start the typing process
+function startTyping(enablePauses = true) {
+    if (isTyping) return;
+    
+    const inputField = findInputField();
+    if (!inputField) return;
+    
+    isTyping = true;
+    enableRandomPauses = enablePauses;
+    
+    // Focus on the input field
     inputField.focus();
-
-    // Simulate typing
-    insertText(inputField, textToType.slice(0, currentIndex + 1));
-    currentIndex++;
-
-    // Random pause between 100ms to 500ms
-    const delay = Math.random() * (500 - 100) + 100;
-    clearInterval(typingInterval);
-    setTimeout(startTyping, delay);
-
-  }, 0);
+    
+    // Start typing
+    typeCharacter();
+    
+    // Update status
+    chrome.storage.local.set({typingStatus: 'typing'});
 }
 
+// Pause typing temporarily
+function pauseTyping() {
+    if (!isTyping) return;
+    
+    // Clear current typing interval
+    clearTimeout(typingInterval);
+    
+    // Update status
+    chrome.storage.local.set({typingStatus: 'paused'});
+    
+    // Set timeout to resume
+    pauseTimeout = setTimeout(() => {
+        if (isTyping) {
+            typeCharacter();
+            chrome.storage.local.set({typingStatus: 'typing'});
+        }
+    }, getRandomPauseDuration());
+}
+
+// Stop typing completely
 function stopTyping() {
-  clearInterval(typingInterval);
+    isTyping = false;
+    
+    // Clear all timeouts
+    clearTimeout(typingInterval);
+    clearTimeout(pauseTimeout);
+    
+    // Update status
+    chrome.storage.local.set({typingStatus: 'stopped'});
 }
 
+// Delete all typed text
 function deleteTypedText() {
-  const inputField = getInputField();
-  if (inputField) {
-    insertText(inputField, "");
-  }
+    const inputField = findInputField();
+    if (!inputField) return;
+    
+    // For WhatsApp
+    if (window.location.href.includes('web.whatsapp.com')) {
+        inputField.textContent = '';
+        // Trigger input event
+        const event = new Event('input', { bubbles: true });
+        inputField.dispatchEvent(event);
+    } 
+    // For Discord
+    else if (window.location.href.includes('discord.com')) {
+        inputField.textContent = '';
+        // Trigger input event
+        const event = new Event('input', { bubbles: true });
+        inputField.dispatchEvent(event);
+    }
 }
 
-function insertText(element, text) {
-  const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-    window.HTMLTextAreaElement.prototype,
-    "value"
-  )?.set;
+// Listen for messages from popup
+chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+    switch (request.action) {
+        case 'start':
+            startTyping(request.enableRandomPauses);
+            break;
+        case 'stop':
+            stopTyping();
+            break;
+        case 'delete':
+            deleteTypedText();
+            break;
+    }
+    sendResponse({status: 'success'});
+    return true;
+});
 
-  element.focus();
-
-  if (element.tagName === "DIV") {
-    element.innerText = text;
-  } else {
-    nativeInputValueSetter.call(element, text);
-    element.dispatchEvent(new Event("input", { bubbles: true }));
-  }
-}
+// Cleanup on page unload
+window.addEventListener('beforeunload', function() {
+    stopTyping();
+});
