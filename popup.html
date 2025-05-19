@@ -1,16 +1,32 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Typer Control</title>
+  <title>Random Chat Typer</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <h3>Auto Typer</h3>
-  <textarea id="textToType" placeholder="Enter text to type..."></textarea>
-  <button id="startBtn">Start Typing</button>
-  <button id="stopBtn">Stop</button>
-  <button id="deleteBtn">Delete</button>
-
+  <div class="container">
+    <h1>Random Chat Typer</h1>
+    
+    <div class="status-container">
+      <div class="status-indicator"></div>
+      <span id="status-text">Ready</span>
+    </div>
+    
+    <div class="button-container">
+      <button id="start-btn" class="btn start">🟢 Start Typing</button>
+      <button id="stop-btn" class="btn stop">🛑 Stop Typing</button>
+      <button id="delete-btn" class="btn delete">❌ Delete Typed Text</button>
+    </div>
+    
+    <div class="toggle-container">
+      <label class="toggle-switch">
+        <input type="checkbox" id="pause-toggle" checked>
+        <span class="toggle-slider"></span>
+      </label>
+      <span>Random Pauses</span>
+    </div>
+  </div>
   <script src="popup.js"></script>
 </body>
 </html>
