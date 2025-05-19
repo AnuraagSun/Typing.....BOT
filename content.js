@@ -3,11 +3,15 @@ let isTyping = false;
 let enableRandomPauses = true;
 let typingInterval = null;
 let pauseTimeout = null;
+let lastActiveElement = null;
 
 // Function to find the input field based on current site
 function findInputField() {
     if (window.location.href.includes('web.whatsapp.com')) {
-        return document.querySelector('div[contenteditable="true"][data-tab="10"]');
+        // Try multiple possible selectors for WhatsApp
+        return document.querySelector('div[contenteditable="true"][data-tab="10"]') || 
+               document.querySelector('div[contenteditable="true"][spellcheck="true"]') ||
+               document.querySelector('div[contenteditable="true"]');
     } else if (window.location.href.includes('discord.com')) {
         return document.querySelector('div[role="textbox"]');
     }
@@ -36,9 +40,60 @@ function shouldPause() {
     return Math.random() * 100 < pauseChance;
 }
 
+// Simulate keyboard event
+function simulateKeyboardEvent(element, letter) {
+    // Create and dispatch keydown event
+    const keydownEvent = new KeyboardEvent('keydown', {
+        key: letter,
+        code: 'Key' + letter.toUpperCase(),
+        keyCode: letter.charCodeAt(0),
+        which: letter.charCodeAt(0),
+        bubbles: true,
+        cancelable: true
+    });
+    element.dispatchEvent(keydownEvent);
+    
+    // Create and dispatch keypress event
+    const keypressEvent = new KeyboardEvent('keypress', {
+        key: letter,
+        code: 'Key' + letter.toUpperCase(),
+        keyCode: letter.charCodeAt(0),
+        which: letter.charCodeAt(0),
+        bubbles: true,
+        cancelable: true
+    });
+    element.dispatchEvent(keypressEvent);
+    
+    // Create and dispatch keyup event
+    const keyupEvent = new KeyboardEvent('keyup', {
+        key: letter,
+        code: 'Key' + letter.toUpperCase(),
+        keyCode: letter.charCodeAt(0),
+        which: letter.charCodeAt(0),
+        bubbles: true,
+        cancelable: true
+    });
+    element.dispatchEvent(keyupEvent);
+    
+    // Create and dispatch input event
+    const inputEvent = new InputEvent('input', {
+        data: letter,
+        inputType: 'insertText',
+        bubbles: true,
+        cancelable: true
+    });
+    element.dispatchEvent(inputEvent);
+}
+
 // Type a single character into the input field
 function typeCharacter() {
-    const inputField = findInputField();
+    // Get the currently focused element or find the input field
+    const inputField = document.activeElement.isContentEditable ? 
+                      document.activeElement : findInputField();
+                      
+    // Save reference to active element
+    lastActiveElement = document.activeElement;
+    
     if (!inputField) {
         stopTyping();
         return;
@@ -47,51 +102,30 @@ function typeCharacter() {
     // Type a random letter
     const letter = getRandomLetter();
     
-    // For WhatsApp
-    if (window.location.href.includes('web.whatsapp.com')) {
-        // Create a text node and insert it at the cursor position
+    try {
+        // For WhatsApp
+        if (window.location.href.includes('web.whatsapp.com')) {
+            // Use execCommand for more reliable typing
+            document.execCommand('insertText', false, letter);
+            simulateKeyboardEvent(inputField, letter);
+        } 
+        // For Discord
+        else if (window.location.href.includes('discord.com')) {
+            // Use execCommand for more reliable typing
+            document.execCommand('insertText', false, letter);
+            simulateKeyboardEvent(inputField, letter);
+        }
+    } catch (e) {
+        console.error("Error typing:", e);
+        // Fallback method
         const selection = window.getSelection();
         const range = selection.getRangeAt(0);
         const textNode = document.createTextNode(letter);
         range.insertNode(textNode);
-        
-        // Move cursor after inserted text
         range.setStartAfter(textNode);
         range.setEndAfter(textNode);
         selection.removeAllRanges();
         selection.addRange(range);
-        
-        // Trigger input event to make WhatsApp recognize the typing
-        const event = new InputEvent('input', { 
-            bubbles: true,
-            cancelable: true,
-            inputType: 'insertText',
-            data: letter
-        });
-        inputField.dispatchEvent(event);
-    } 
-    // For Discord
-    else if (window.location.href.includes('discord.com')) {
-        // Insert text at cursor position
-        const selection = window.getSelection();
-        const range = selection.getRangeAt(0);
-        const textNode = document.createTextNode(letter);
-        range.insertNode(textNode);
-        
-        // Move cursor after inserted text
-        range.setStartAfter(textNode);
-        range.setEndAfter(textNode);
-        selection.removeAllRanges();
-        selection.addRange(range);
-        
-        // Trigger input event
-        const event = new InputEvent('input', { 
-            bubbles: true,
-            cancelable: true,
-            inputType: 'insertText',
-            data: letter
-        });
-        inputField.dispatchEvent(event);
     }
 
     // Check if we should pause
@@ -108,7 +142,10 @@ function startTyping(enablePauses = true) {
     // Stop any existing typing first
     stopTyping();
     
-    const inputField = findInputField();
+    // Get the currently focused element or find the input field
+    const inputField = document.activeElement.isContentEditable ? 
+                      document.activeElement : findInputField();
+                      
     if (!inputField) return;
     
     isTyping = true;
@@ -117,32 +154,7 @@ function startTyping(enablePauses = true) {
     // Focus on the input field
     inputField.focus();
     
-    // Ensure cursor is at the end of existing text for WhatsApp
-    if (window.location.href.includes('web.whatsapp.com')) {
-        // Create a range at the end of the content
-        const range = document.createRange();
-        const selection = window.getSelection();
-        
-        if (inputField.childNodes.length > 0) {
-            const lastChild = inputField.childNodes[inputField.childNodes.length - 1];
-            if (lastChild.nodeType === Node.TEXT_NODE) {
-                range.setStart(lastChild, lastChild.length);
-                range.setEnd(lastChild, lastChild.length);
-            } else {
-                range.selectNodeContents(inputField);
-                range.collapse(false); // Collapse to end
-            }
-        } else {
-            range.selectNodeContents(inputField);
-            range.collapse(false); // Collapse to end
-        }
-        
-        // Apply the selection
-        selection.removeAllRanges();
-        selection.addRange(range);
-    }
-    
-    // Start typing after ensuring cursor position
+    // Start typing after a short delay
     setTimeout(typeCharacter, 100);
     
     // Update status
@@ -162,6 +174,10 @@ function pauseTyping() {
     // Set timeout to resume
     pauseTimeout = setTimeout(() => {
         if (isTyping) {
+            // Refocus if needed
+            if (lastActiveElement && document.activeElement !== lastActiveElement) {
+                lastActiveElement.focus();
+            }
             typeCharacter();
             chrome.storage.local.set({typingStatus: 'typing'});
         }
@@ -182,50 +198,36 @@ function stopTyping() {
 
 // Delete all typed text
 function deleteTypedText() {
-    const inputField = findInputField();
+    // Get the currently focused element or find the input field
+    const inputField = document.activeElement.isContentEditable ? 
+                      document.activeElement : findInputField();
+                      
     if (!inputField) return;
     
-    // For WhatsApp
-    if (window.location.href.includes('web.whatsapp.com')) {
-        inputField.textContent = '';
-        
-        // Create a range at the start of the input field
-        const range = document.createRange();
-        const selection = window.getSelection();
-        range.selectNodeContents(inputField);
-        range.collapse(true); // Collapse to start
-        selection.removeAllRanges();
-        selection.addRange(range);
-        
-        // Trigger input event
-        const event = new InputEvent('input', { 
-            bubbles: true,
-            cancelable: true,
-            inputType: 'deleteContent'
-        });
-        inputField.dispatchEvent(event);
-    } 
-    // For Discord
-    else if (window.location.href.includes('discord.com')) {
-        inputField.textContent = '';
-        
-        // Create a range at the start of the input field
-        const range = document.createRange();
-        const selection = window.getSelection();
-        range.selectNodeContents(inputField);
-        range.collapse(true); // Collapse to start
-        selection.removeAllRanges();
-        selection.addRange(range);
-        
-        // Trigger input event
-        const event = new InputEvent('input', { 
-            bubbles: true,
-            cancelable: true,
-            inputType: 'deleteContent'
-        });
-        inputField.dispatchEvent(event);
-    }
+    // Focus on the input field
+    inputField.focus();
+    
+    // Select all text
+    document.execCommand('selectAll', false, null);
+    
+    // Delete selected text
+    document.execCommand('delete', false, null);
+    
+    // Trigger input event
+    const event = new InputEvent('input', { 
+        bubbles: true,
+        cancelable: true,
+        inputType: 'deleteContent'
+    });
+    inputField.dispatchEvent(event);
 }
+
+// Monitor focus changes to track the active input field
+document.addEventListener('focusin', function(e) {
+    if (e.target.isContentEditable) {
+        lastActiveElement = e.target;
+    }
+});
 
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
