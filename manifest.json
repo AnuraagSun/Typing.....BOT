@@ -1,29 +1,29 @@
 {
-  "manifest_version": 3,
-  "name": "WhatsApp & Discord Auto Typer",
-  "version": "1.0",
-  "description": "Simulates typing with pause, stop, and delete options.",
-  "permissions": ["scripting", "activeTab"],
-  "action": {
-    "default_popup": "popup.html",
-    "default_icon": {
-      "16": "icon.png"
-    }
-  },
-  "background": {
-    "service_worker": "background.js"
-  },
-  "host_permissions": [
-    "https://web.whatsapp.com/*",
-    "https://discord.com/*"
-  ],
-  "content_scripts": [
-    {
-      "matches": [
+    "manifest_version": 3,
+    "name": "WhatsApp & Discord Auto Typer",
+    "version": "1.0",
+    "description": "Simulates typing on WhatsApp and Discord with pause, stop, and delete options.",
+    "permissions": [
+        "scripting",
+        "activeTab"
+    ],
+    "host_permissions": [
         "https://web.whatsapp.com/*",
         "https://discord.com/*"
-      ],
-      "js": ["content.js"]
-    }
-  ]
+    ],
+    "action": {
+        "default_popup": "popup.html",
+        "default_icon": {
+            "16": "icon.png"
+        }
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "https://web.whatsapp.com/*",
+                "https://discord.com/*"
+            ],
+            "js": ["content.js"]
+        }
+    ]
 }
