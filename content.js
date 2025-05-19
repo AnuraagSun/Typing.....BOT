@@ -7,7 +7,7 @@ let pauseTimeout = null;
 // Function to find the input field based on current site
 function findInputField() {
     if (window.location.href.includes('web.whatsapp.com')) {
-        return document.querySelector('div[contenteditable="true"]');
+        return document.querySelector('div[contenteditable="true"][data-tab="10"]');
     } else if (window.location.href.includes('discord.com')) {
         return document.querySelector('div[role="textbox"]');
     }
@@ -49,9 +49,25 @@ function typeCharacter() {
     
     // For WhatsApp
     if (window.location.href.includes('web.whatsapp.com')) {
-        inputField.textContent += letter;
+        // Create a text node and insert it at the cursor position
+        const selection = window.getSelection();
+        const range = selection.getRangeAt(0);
+        const textNode = document.createTextNode(letter);
+        range.insertNode(textNode);
+        
+        // Move cursor after inserted text
+        range.setStartAfter(textNode);
+        range.setEndAfter(textNode);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        
         // Trigger input event to make WhatsApp recognize the typing
-        const event = new Event('input', { bubbles: true });
+        const event = new InputEvent('input', { 
+            bubbles: true,
+            cancelable: true,
+            inputType: 'insertText',
+            data: letter
+        });
         inputField.dispatchEvent(event);
     } 
     // For Discord
@@ -61,13 +77,20 @@ function typeCharacter() {
         const range = selection.getRangeAt(0);
         const textNode = document.createTextNode(letter);
         range.insertNode(textNode);
+        
+        // Move cursor after inserted text
         range.setStartAfter(textNode);
         range.setEndAfter(textNode);
         selection.removeAllRanges();
         selection.addRange(range);
         
         // Trigger input event
-        const event = new Event('input', { bubbles: true });
+        const event = new InputEvent('input', { 
+            bubbles: true,
+            cancelable: true,
+            inputType: 'insertText',
+            data: letter
+        });
         inputField.dispatchEvent(event);
     }
 
@@ -82,7 +105,8 @@ function typeCharacter() {
 
 // Start the typing process
 function startTyping(enablePauses = true) {
-    if (isTyping) return;
+    // Stop any existing typing first
+    stopTyping();
     
     const inputField = findInputField();
     if (!inputField) return;
@@ -93,8 +117,33 @@ function startTyping(enablePauses = true) {
     // Focus on the input field
     inputField.focus();
     
-    // Start typing
-    typeCharacter();
+    // Ensure cursor is at the end of existing text for WhatsApp
+    if (window.location.href.includes('web.whatsapp.com')) {
+        // Create a range at the end of the content
+        const range = document.createRange();
+        const selection = window.getSelection();
+        
+        if (inputField.childNodes.length > 0) {
+            const lastChild = inputField.childNodes[inputField.childNodes.length - 1];
+            if (lastChild.nodeType === Node.TEXT_NODE) {
+                range.setStart(lastChild, lastChild.length);
+                range.setEnd(lastChild, lastChild.length);
+            } else {
+                range.selectNodeContents(inputField);
+                range.collapse(false); // Collapse to end
+            }
+        } else {
+            range.selectNodeContents(inputField);
+            range.collapse(false); // Collapse to end
+        }
+        
+        // Apply the selection
+        selection.removeAllRanges();
+        selection.addRange(range);
+    }
+    
+    // Start typing after ensuring cursor position
+    setTimeout(typeCharacter, 100);
     
     // Update status
     chrome.storage.local.set({typingStatus: 'typing'});
@@ -139,15 +188,41 @@ function deleteTypedText() {
     // For WhatsApp
     if (window.location.href.includes('web.whatsapp.com')) {
         inputField.textContent = '';
+        
+        // Create a range at the start of the input field
+        const range = document.createRange();
+        const selection = window.getSelection();
+        range.selectNodeContents(inputField);
+        range.collapse(true); // Collapse to start
+        selection.removeAllRanges();
+        selection.addRange(range);
+        
         // Trigger input event
-        const event = new Event('input', { bubbles: true });
+        const event = new InputEvent('input', { 
+            bubbles: true,
+            cancelable: true,
+            inputType: 'deleteContent'
+        });
         inputField.dispatchEvent(event);
     } 
     // For Discord
     else if (window.location.href.includes('discord.com')) {
         inputField.textContent = '';
+        
+        // Create a range at the start of the input field
+        const range = document.createRange();
+        const selection = window.getSelection();
+        range.selectNodeContents(inputField);
+        range.collapse(true); // Collapse to start
+        selection.removeAllRanges();
+        selection.addRange(range);
+        
         // Trigger input event
-        const event = new Event('input', { bubbles: true });
+        const event = new InputEvent('input', { 
+            bubbles: true,
+            cancelable: true,
+            inputType: 'deleteContent'
+        });
         inputField.dispatchEvent(event);
     }
 }
